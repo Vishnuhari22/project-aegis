@@ -1,60 +1,72 @@
-# Step 1: Import the necessary libraries
-import cv2  # This is the OpenCV library for video and image processing.
-from ultralytics import YOLO # This imports the YOLO model class from the ultralytics library.
+# main.py
 
-# Step 2: Load the pre-trained YOLOv8 model
-# 'yolov8n.pt' is the "nano" version of YOLOv8. It's small and fast, perfect for starting.
-# The .pt file will be downloaded automatically the first time this line runs.
-print("Loading YOLOv8 model...")
+import cv2
+from ultralytics import YOLO
+
+# --- 1. Initialization and Model Loading ---
+# Load the pre-trained YOLOv8 'nano' model. 
+# The 'ultralytics' library handles downloading the model weights automatically.
+print("Loading Project Aegis model...")
 model = YOLO('yolov8n.pt')
 print("Model loaded successfully.")
 
-# Step 3: Open the video file
+# --- 2. Video Input ---
+# Define the path to your test video.
 video_path = 'test_video.mp4'
-# cv2.VideoCapture creates a video capture object. You can also put 0 here to use your webcam.
+# Create a VideoCapture object to read frames from the video file.
 cap = cv2.VideoCapture(video_path)
 
-# Check if the video opened successfully. If not, exit.
+# Check if the video file was opened successfully.
 if not cap.isOpened():
     print(f"Error: Could not open video file at {video_path}")
     exit()
 
-# Step 4: Loop through the video frames
+# --- 3. Main Processing Loop ---
+# This loop reads the video frame by frame until the end.
 while True:
-    # cap.read() reads one frame from the video.
-    # 'success' is a boolean (True/False) that tells us if a frame was read correctly.
-    # 'frame' is the actual image data of the frame.
+    # Read a single frame from the video. 'success' is a boolean, 'frame' is the image.
     success, frame = cap.read()
 
+    # If a frame was read successfully, process it.
     if success:
-        # Step 5: Run YOLOv8 inference on the frame
-        # This is the magic line where the AI analyzes the image.
-        # It returns a list of result objects.
+        # --- 4. AI Inference ---
+        # Pass the frame to the loaded YOLO model for object detection.
         results = model(frame)
+        # The 'results' object contains all the information about detected objects.
+        result = results[0] # Get the results for the first image (our frame).
 
-        # Step 6: Visualize the results on the frame
-        # '.plot()' is a handy function from ultralytics that draws all the bounding boxes
-        # and labels on the frame for us.
-        annotated_frame = results[0].plot()
+        # --- 5. Data Extraction ---
+        # Iterate through each detected bounding box in the current frame.
+        for box in result.boxes:
+            # Extract the class ID (e.g., 0 for 'person') and convert to an integer.
+            class_id = int(box.cls.item())
+            # Get the human-readable class name (e.g., 'person') using the model's names dictionary.
+            class_name = model.names[class_id]
+            # Get the confidence score (how sure the model is) and convert to a float.
+            confidence = float(box.conf.item())
 
-        # Step 7: Display the annotated frame in a window
-        # 'cv2.imshow()' displays an image in a window.
-        # The first argument is the window name, the second is the image to display.
-        cv2.imshow("Aegis - Real-Time Anomaly Detection", annotated_frame)
+            # Only process detections with a confidence score higher than 0.5 (50%).
+            if confidence > 0.5:
+                # Print the extracted data to the terminal. This is our structured output.
+                print(f"[INFO] Detected: {class_name} | Confidence: {confidence:.2f}")
 
-        # Step 8: Wait for a key press to exit
-        # 'cv2.waitKey(1)' waits for 1 millisecond for a key press.
-        # '& 0xFF == ord("q")' checks if the key pressed was 'q'.
-        # If it was, we break out of the loop to close the application.
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        # --- 6. Visualization ---
+        # Use the '.plot()' method to draw the bounding boxes and labels on the frame.
+        annotated_frame = result.plot()
+        # Display the frame with the detections in a window with a standard title.
+        cv2.imshow("Project Aegis - Live Feed", annotated_frame)
+
+        # --- 7. Exit Condition ---
+        # Wait for 1 millisecond. If the 'q' key is pressed during that time, exit the loop.
+        if cv2.waitKey(1) & 0xFF == ord("q"):
             break
     else:
-        # If 'success' is False, it means we've reached the end of the video.
-        print("Reached the end of the video.")
+        # If 'success' is false, it means we've reached the end of the video.
         break
 
-# Step 9: Clean up
-# Release the video capture object and close all OpenCV windows.
-print("Cleaning up and closing application.")
+# --- 8. Cleanup ---
+# Release the video capture object to free up resources.
 cap.release()
+# Close all the windows created by OpenCV.
 cv2.destroyAllWindows()
+print("Application shut down gracefully.")
