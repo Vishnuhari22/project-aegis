@@ -2,71 +2,95 @@
 
 import cv2
 from ultralytics import YOLO
+import math # We need the math library to calculate distance
 
 # --- 1. Initialization and Model Loading ---
-# Load the pre-trained YOLOv8 'nano' model. 
-# The 'ultralytics' library handles downloading the model weights automatically.
 print("Loading Project Aegis model...")
 model = YOLO('yolov8n.pt')
 print("Model loaded successfully.")
 
 # --- 2. Video Input ---
-# Define the path to your test video.
 video_path = 'test_video.mp4'
-# Create a VideoCapture object to read frames from the video file.
 cap = cv2.VideoCapture(video_path)
 
-# Check if the video file was opened successfully.
 if not cap.isOpened():
     print(f"Error: Could not open video file at {video_path}")
     exit()
 
+# --- NEW: Object Tracker Initialization ---
+# This dictionary will be our short-term memory.
+# Key: A unique object ID (e.g., 1, 2, 3...)
+# Value: The last known center coordinates (x, y) of that object.
+tracker = {}
+next_object_id = 1 # Start assigning IDs from 1.
+
 # --- 3. Main Processing Loop ---
-# This loop reads the video frame by frame until the end.
 while True:
-    # Read a single frame from the video. 'success' is a boolean, 'frame' is the image.
     success, frame = cap.read()
 
-    # If a frame was read successfully, process it.
     if success:
         # --- 4. AI Inference ---
-        # Pass the frame to the loaded YOLO model for object detection.
         results = model(frame)
-        # The 'results' object contains all the information about detected objects.
-        result = results[0] # Get the results for the first image (our frame).
+        result = results[0]
+
+        # --- NEW: Prepare a list for current frame's detections ---
+        # We'll store the center point and class name of each detected object in this list.
+        current_detections = []
 
         # --- 5. Data Extraction ---
-        # Iterate through each detected bounding box in the current frame.
         for box in result.boxes:
-            # Extract the class ID (e.g., 0 for 'person') and convert to an integer.
-            class_id = int(box.cls.item())
-            # Get the human-readable class name (e.g., 'person') using the model's names dictionary.
-            class_name = model.names[class_id]
-            # Get the confidence score (how sure the model is) and convert to a float.
             confidence = float(box.conf.item())
-
-            # Only process detections with a confidence score higher than 0.5 (50%).
             if confidence > 0.5:
-                # Print the extracted data to the terminal. This is our structured output.
-                print(f"[INFO] Detected: {class_name} | Confidence: {confidence:.2f}")
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                class_id = int(box.cls.item())
+                class_name = model.names[class_id]
+
+                # We only want to track objects relevant to our anomaly
+                if class_name in ['person', 'backpack', 'handbag', 'suitcase', 'bag']:
+                    center_x = (x1 + x2) // 2
+                    center_y = (y1 + y2) // 2
+                    current_detections.append(((center_x, center_y), class_name))
+                    # Draw the bounding box for visualization
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+        # --- NEW: Object Tracking Logic ---
+        # This dictionary will hold the tracked objects for the current frame.
+        updated_tracker = {}
+        
+        for det_center, det_class_name in current_detections:
+            object_found = False
+            for obj_id, tracked_center in tracker.items():
+                # Calculate the Euclidean distance between a new detection and an existing object
+                distance = math.sqrt((det_center[0] - tracked_center[0])**2 + (det_center[1] - tracked_center[1])**2)
+                
+                # If the distance is below a threshold, it's the same object.
+                if distance < 35: # This threshold may need tuning based on video resolution and movement speed.
+                    updated_tracker[obj_id] = det_center
+                    object_found = True
+                    # Display the object's ID in green for a successfully tracked object
+                    cv2.putText(frame, f"{det_class_name} ID: {obj_id}", (det_center[0], det_center[1]-15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    break
+            
+            # If after checking all tracked objects, none were close enough, it's a new object.
+            if not object_found:
+                updated_tracker[next_object_id] = det_center
+                # Display the new object's ID in red to signify it's new
+                cv2.putText(frame, f"{det_class_name} ID: {next_object_id}", (det_center[0], det_center[1]-15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                next_object_id += 1
+        
+        # Update our main tracker with the latest information for the next frame.
+        tracker = updated_tracker
 
         # --- 6. Visualization ---
-        # Use the '.plot()' method to draw the bounding boxes and labels on the frame.
-        annotated_frame = result.plot()
-        # Display the frame with the detections in a window with a standard title.
-        cv2.imshow("Project Aegis - Live Feed", annotated_frame)
+        cv2.imshow("Project Aegis - Object Tracking", frame)
 
         # --- 7. Exit Condition ---
-        # Wait for 1 millisecond. If the 'q' key is pressed during that time, exit the loop.
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
     else:
-        # If 'success' is false, it means we've reached the end of the video.
         break
 
 # --- 8. Cleanup ---
-# Release the video capture object to free up resources.
 cap.release()
-# Close all the windows created by OpenCV.
 cv2.destroyAllWindows()
 print("Application shut down gracefully.")
