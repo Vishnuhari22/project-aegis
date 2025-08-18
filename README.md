@@ -4,10 +4,6 @@
 
 This document covers the successful completion of Phase 1, which resulted in a fully functional local prototype capable of identifying an "unattended package" anomaly and broadcasting alerts to a live web dashboard.
 
-## Demo
-
-_(A GIF demonstrating the final prototype in action will be placed here)_
-
 ## Features Completed in Phase 1
 
 *   **AI-Powered Vision Engine:** Implemented a core detection engine using Python, OpenCV, and a YOLOv8 model to identify and extract data for multiple object classes from video streams.
